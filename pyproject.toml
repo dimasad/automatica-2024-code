@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gvispe"
+version = "0.1.dev1"
+authors = [
+  { name="Dimas Abreu Archanjo Dutra", email="dimas.dutra@mail.wvu.edu" },
+]
+description = "Gaussian variational inference state and parameter estimation."
+readme = "README.md"
+license = {file = "LICENSE"}
+dependencies = [
+  "numpy",
+  "scipy",
+  "jax",
+  "hedeut",
+]
+
+[project.optional-dependencies]
+cpu = ["jax[cpu]"]
+devextra = [
+  "ipython",
+  "ipdb",
+  "matplotlib",
+  "optax",
+]
+
+[project.urls]
+Repository = "https://github.com/dimasad/gvispe"
