@@ -261,6 +261,11 @@ if __name__ == '__main__':
                     f'{ierr=:1.2e}',
                     sep='\t'
                 )
+                if args.txtout is not None:
+                    secs = (datetime.datetime.today() - start).total_seconds()
+                    args.txtout.truncate(0)
+                    print(nx, nu, ny, N, Nbatch, ierr, secs, args.seed, 
+                          file=args.txtout)
 
             if any(jnp.any(~jnp.isfinite(v)) for v in grad):
                 break
@@ -274,4 +279,5 @@ if __name__ == '__main__':
     if args.txtout is not None:
         with args.txtout as f:
             ierr = impulse_err(imp_true, model, dec)
+            f.truncate(0)
             print(nx, nu, ny, N, Nbatch, ierr, secs, args.seed, file=f)
