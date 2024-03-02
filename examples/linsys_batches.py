@@ -61,19 +61,34 @@ def impulse_err(imp_true, model, dec):
     sys = signal.StateSpace(qdict['A'], qdict['B'], qdict['C'], qdict['D'], dt=1)
     y = np.array(signal.dimpulse(sys, n=n)[1])
     err = y - imp_true
-    return np.sum(err**2, axis=1).mean()
+    rms = np.sqrt(np.sum(err**2, axis=1)).mean()
+    return rms, y, qdict
 
 
 def save_progress(args, start, imp_true, model, dec):    
+    ierr, y, qdict = impulse_err(imp_true, model, dec)
     if args.txtout is not None:
         secs = (datetime.datetime.today() - start).total_seconds()
-        ierr = impulse_err(imp_true, model, dec)
-        args.txtout.truncate(0)
+        args.txtout.seek(0)
+        args.txtout.truncate()
         print(
             args.nx, args.nu, args.ny, args.N, args.Nbatch, 
             ierr, secs, args.seed, file=args.txtout
         )
         args.txtout.flush()
+    if args.pickleout is not None:
+        outdata = dict(
+            A=np.asarray(qdict['A']), B=np.asarray(qdict['B']),
+            C=np.asarray(qdict['C']), D=np.asarray(qdict['D']),
+            vech_log_sQ=np.asarray(qdict['vech_log_sQ']),
+            vech_log_sR=np.asarray(qdict['vech_log_sR']),
+            nx=args.nx, nu=args.nu, ny=args.ny, N=args.N, Nbatch=args.Nbatch,
+            seed=args.seed, imp_true=imp_true, y=y
+        )
+        args.pickleout.seek(0)
+        args.pickleout.truncate()
+        pickle.dump(outdata, args.pickleout, protocol=-1)
+        args.pickleout.flush()
 
 
 if __name__ == '__main__':
@@ -263,7 +278,7 @@ if __name__ == '__main__':
 
             if steps % 100 == 0:
                 fooc = p.Decision(*[jnp.sum(v**2) ** 0.5 for v in grad])
-                ierr = impulse_err(imp_true, model, dec)
+                ierr, *_ = impulse_err(imp_true, model, dec)
                 print(
                     f'{epoch}', f'sched={sched(steps):1.1e}', 
                     f'c={cost:1.2e}', f'm={mincost:1.2e}',
