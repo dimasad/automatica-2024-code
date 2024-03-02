@@ -64,6 +64,18 @@ def impulse_err(imp_true, model, dec):
     return np.sum(err**2, axis=1).mean()
 
 
+def save_progress(args, start, imp_true, model, dec):    
+    if args.txtout is not None:
+        secs = (datetime.datetime.today() - start).total_seconds()
+        ierr = impulse_err(imp_true, model, dec)
+        args.txtout.truncate(0)
+        print(
+            args.nx, args.nu, args.ny, args.N, args.Nbatch, 
+            ierr, secs, args.seed, file=args.txtout
+        )
+        args.txtout.flush()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description=__doc__, fromfile_prefix_chars='@'
@@ -261,11 +273,7 @@ if __name__ == '__main__':
                     f'{ierr=:1.2e}',
                     sep='\t'
                 )
-                if args.txtout is not None:
-                    secs = (datetime.datetime.today() - start).total_seconds()
-                    args.txtout.truncate(0)
-                    print(nx, nu, ny, N, Nbatch, ierr, secs, args.seed, 
-                          file=args.txtout)
+                save_progress(args, start, imp_true, model, dec)
 
             if any(jnp.any(~jnp.isfinite(v)) for v in grad):
                 break
@@ -273,11 +281,7 @@ if __name__ == '__main__':
             updates, opt_state = optimizer.update(grad, opt_state)
             dec = optax.apply_updates(dec, updates)
             steps += 1
-    secs = (datetime.datetime.today() - start).total_seconds()
+    
 
     # Save results
-    if args.txtout is not None:
-        with args.txtout as f:
-            ierr = impulse_err(imp_true, model, dec)
-            f.truncate(0)
-            print(nx, nu, ny, N, Nbatch, ierr, secs, args.seed, file=f)
+    save_progress(args, start, imp_true, model, dec)
