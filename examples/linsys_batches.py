@@ -61,8 +61,10 @@ def impulse_err(imp_true, model, dec):
     sys = signal.StateSpace(qdict['A'], qdict['B'], qdict['C'], qdict['D'], dt=1)
     y = np.array(signal.dimpulse(sys, n=n)[1])
     err = y - imp_true
-    rms = np.sqrt(np.sum(err**2, axis=1)).mean()
-    return rms, y, qdict
+    rmserr = np.sqrt(np.sum(err**2, axis=1))
+    rmssig = np.sqrt(np.sum(imp_true**2, axis=1))
+    eratio = np.mean(rmserr/rmssig)
+    return eratio, y, qdict
 
 
 def save_progress(args, start, imp_true, model, dec):    
@@ -278,14 +280,14 @@ if __name__ == '__main__':
 
             if steps % 100 == 0:
                 fooc = p.Decision(*[jnp.sum(v**2) ** 0.5 for v in grad])
-                ierr, *_ = impulse_err(imp_true, model, dec)
+                eratio, *_ = impulse_err(imp_true, model, dec)
                 print(
                     f'{epoch}', f'sched={sched(steps):1.1e}', 
                     f'c={cost:1.2e}', f'm={mincost:1.2e}',
                     f'{fooc.K=:1.2e}', f'{fooc.q=:1.2e}', 
                     f'{fooc.vech_log_S_cond=:1.2e}',
                     f'{fooc.S_cross=:1.2e}',
-                    f'{ierr=:1.2e}',
+                    f'{eratio=:1.2e}',
                     sep='\t'
                 )
                 save_progress(args, start, imp_true, model, dec)
