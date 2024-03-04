@@ -134,6 +134,10 @@ if __name__ == '__main__':
         help='Number of batches.',
     )
     parser.add_argument(
+        '--max_pole_radius', default=1.0, type=float,
+        help='Largest pole radius for the system.',
+    )
+    parser.add_argument(
         '--lrate0', default=5e-2, type=float,
         help='Stochastic optimization initial learning rate.',
     )
@@ -192,9 +196,9 @@ if __name__ == '__main__':
     A = np.random.rand(nx, nx)
     L, V = np.linalg.eig(A)
     complex_L = np.iscomplex(L).nonzero()[0]
-    stab_L = np.random.rand(nx) * np.exp(1j * np.angle(L))
-    stab_L[complex_L[1::2]] = stab_L[complex_L[::2]].conj() 
-    L = np.where(np.abs(L) < 1, L, stab_L)
+    stab_L = args.max_pole_radius * np.random.rand(nx) * np.exp(1j*np.angle(L))
+    stab_L[complex_L[1::2]] = stab_L[complex_L[::2]].conj()
+    L = np.where(np.abs(L) < args.max_pole_radius, L, stab_L)
     A = np.real(V @ np.diag(L) @ np.linalg.inv(V))
     B = np.random.randn(nx, nu)
     C = np.identity(nx)[:ny] if args.c_identity else np.random.randn(ny, nx)
