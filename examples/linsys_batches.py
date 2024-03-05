@@ -67,23 +67,21 @@ def impulse_err(imp_true, model, dec):
     return eratio, y, qdict
 
 
-def save_progress(args, start, imp_true, model, dec):    
-    ierr, y, qdict = impulse_err(imp_true, model, dec)
+def save_progress(args, start, siminfo, model, dec):  
+    imp_true, param_true = siminfo  
+    eratio, y, qdict = impulse_err(imp_true, model, dec)
     if args.txtout is not None:
         secs = (datetime.datetime.today() - start).total_seconds()
         args.txtout.seek(0)
         args.txtout.truncate()
         print(
             args.nx, args.nu, args.ny, args.N, args.Nbatch, 
-            ierr, secs, args.seed, file=args.txtout
+            eratio, secs, args.seed, file=args.txtout
         )
         args.txtout.flush()
     if args.pickleout is not None:
         outdata = dict(
-            A=np.asarray(qdict['A']), B=np.asarray(qdict['B']),
-            C=np.asarray(qdict['C']), D=np.asarray(qdict['D']),
-            vech_log_sQ=np.asarray(qdict['vech_log_sQ']),
-            vech_log_sR=np.asarray(qdict['vech_log_sR']),
+            params=qdict, param_true=param_true,
             nx=args.nx, nu=args.nu, ny=args.ny, N=args.N, Nbatch=args.Nbatch,
             seed=args.seed, imp_true=imp_true, y=y
         )
@@ -91,6 +89,7 @@ def save_progress(args, start, imp_true, model, dec):
         args.pickleout.truncate()
         pickle.dump(outdata, args.pickleout, protocol=-1)
         args.pickleout.flush()
+    return eratio
 
 
 if __name__ == '__main__':
@@ -240,6 +239,7 @@ if __name__ == '__main__':
     )
     sys_true = signal.StateSpace(A, B, C, D, dt=1)
     imp_true = np.array(signal.dimpulse(sys_true, n=100)[1])
+    siminfo = imp_true, dict(A=A, B=B, C=C, D=D, sQ=sQ, sR=sR, Q=Q, R=R)
 
     p = estimators.SmootherKernel(model, args.nwin, elbo_multiplier=-1)
     K0 = np.zeros((nx, ny+nu, args.nwin))
@@ -264,7 +264,6 @@ if __name__ == '__main__':
 
     # Initialize solver
     dec = dec0
-    mincost = np.inf
     sched = optax.exponential_decay(
         init_value=args.lrate0, 
         transition_steps=args.transition_steps,
@@ -280,21 +279,20 @@ if __name__ == '__main__':
         for i in np.random.permutation(Nbatch):
             # Calculate cost and gradient
             cost, grad = value_and_grad(dec, data[i], coeff)
-            mincost = min(mincost, cost)
 
             if steps % 100 == 0:
                 fooc = p.Decision(*[jnp.sum(v**2) ** 0.5 for v in grad])
-                eratio, *_ = impulse_err(imp_true, model, dec)
+                eratio = save_progress(args, start, siminfo, model, dec)
                 print(
                     f'{epoch}', f'sched={sched(steps):1.1e}', 
-                    f'c={cost:1.2e}', f'm={mincost:1.2e}',
+                    f'{cost=:1.2e}',
                     f'{fooc.K=:1.2e}', f'{fooc.q=:1.2e}', 
                     f'{fooc.vech_log_S_cond=:1.2e}',
                     f'{fooc.S_cross=:1.2e}',
                     f'{eratio=:1.2e}',
                     sep='\t'
                 )
-                save_progress(args, start, imp_true, model, dec)
+                
 
             if any(jnp.any(~jnp.isfinite(v)) for v in grad):
                 break
@@ -303,6 +301,5 @@ if __name__ == '__main__':
             dec = optax.apply_updates(dec, updates)
             steps += 1
     
-
     # Save results
-    save_progress(args, start, imp_true, model, dec)
+    save_progress(args, start, siminfo, model, dec)
