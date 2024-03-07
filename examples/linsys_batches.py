@@ -223,8 +223,8 @@ if __name__ == '__main__':
         scipy.io.savemat(args.savemat, matdata)
 
     # Divide into batches
-    yb = y.reshape(Nbatch, N, ny)
-    ub = u.reshape(Nbatch, N, nu)
+    yb = jnp.array(y.reshape(Nbatch, N, ny))
+    ub = jnp.array(u.reshape(Nbatch, N, nu))
 
     # Create model and data objects
     model = Model(nx, nu, ny, args.c_identity)
