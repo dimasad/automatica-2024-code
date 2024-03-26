@@ -71,22 +71,16 @@ class LinearGaussianModel(GaussianModel):
         self.ntrily = ny * (ny + 1) // 2
         """Number of elements in lower triangle of ny by ny matrix."""
 
-        if init_packer:
-            q_packer = hedeut.Packer(
-                A=(nx, nx),
-                B=(nx, nu),
-                C=(ny, nx),
-                D=(ny, nu),
-                vech_log_sQ=(self.ntrilx,),
-                vech_log_sR=(self.ntrily,),
-            )
-            nq = q_packer.size
-        else:
-            q_packer = None
-            nq = None
-        self.q_packer = q_packer
+        self.q_packer = hedeut.Packer(
+            A=(nx, nx),
+            B=(nx, nu),
+            C=(ny, nx),
+            D=(ny, nu),
+            vech_log_sQ=(self.ntrilx,),
+            vech_log_sR=(self.ntrily,),
+        )
 
-        self.nq = nq
+        self.nq = self.q_packer.size
         """Number of classical (deterministic) parameters."""
 
     def A(self, q):

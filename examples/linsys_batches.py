@@ -28,32 +28,6 @@ import gvispe.stats
 from gvispe import common, estimators, modeling, sde
 
 
-class Model(modeling.LinearGaussianModel):
-    def __init__(self, nx, nu, ny, c_identity):
-        super().__init__(nx, nu, ny, not c_identity)
-        
-        self.c_identity = c_identity
-        """Whether C is the identity matrix."""
-
-        self.q_packer = hedeut.Packer(
-            A=(self.nx, self.nx),
-            B=(self.nx, self.nu),
-            C=(0,) if c_identity else (self.ny, self.nx),
-            D=(ny, nu),
-            vech_log_sQ=(self.ntrilx,),
-            vech_log_sR=(self.ntrily,),
-        )
-
-        self.nq = self.q_packer.size
-        """Number of classical (deterministic) parameters."""
-
-    def C(self, q):
-        if self.c_identity:
-            return jnp.identity(self.nx)[:self.ny]
-        else:
-            return self.q_packer.unpack(q)['C']
-
-
 def impulse_err(imp_true, model, dec):
     """Calculate the impulse response error."""
     n = imp_true.shape[1]
@@ -107,10 +81,6 @@ if __name__ == '__main__':
     parser.add_argument(
         '--reload', default=[], nargs='*',
         help='Modules to reload'
-    )
-    parser.add_argument(
-        '--c_identity', action=argparse.BooleanOptionalAction,
-        help='Whether C is the identity matrix.',
     )
     parser.add_argument(
         '--nx', default=10, type=int,
@@ -200,7 +170,7 @@ if __name__ == '__main__':
     L = np.where(np.abs(L) < args.max_pole_radius, L, stab_L)
     A = np.real(V @ np.diag(L) @ np.linalg.inv(V))
     B = np.random.randn(nx, nu)
-    C = np.identity(nx)[:ny] if args.c_identity else np.random.randn(ny, nx)
+    C = np.random.randn(ny, nx)
     D = np.random.randn(ny, nu) * (np.random.rand(ny, nu) > 0.8)
     sQ = np.diag(np.repeat(0.1, nx))
     sR = np.diag(np.repeat(0.15, ny))
@@ -222,18 +192,19 @@ if __name__ == '__main__':
         matdata = {'A': A, 'B': B, 'C': C, 'D': D, 'y': y, 'u': u}
         scipy.io.savemat(args.savemat, matdata)
 
-    # Divide into batches
-    yb = jnp.array(y.reshape(Nbatch, N, ny))
-    ub = jnp.array(u.reshape(Nbatch, N, nu))
+    # Divide data into batches
+    data = []
+    for i in range(Nbatch):
+        offset_start = -args.nwin//2 if i > 0 else 0
+        offset_end = args.nwin//2 if i+1 < Nbatch else 0
+        batch_slice = slice(i*N + offset_start, (i+1)*N + offset_end)
+        datum = estimators.Data(y[batch_slice], u[batch_slice])
+        data.append(datum)
 
     # Create model and data objects
-    model = Model(nx, nu, ny, args.c_identity)
-    data = [estimators.Data(yb[i], ub[i]) for i in range(Nbatch)]
+    model = modeling.LinearGaussianModel(nx, nu, ny)
     q_true = model.q_packer.pack(
-        A=A, 
-        B=B,
-        C=np.zeros(0) if args.c_identity else C,
-        D=D,
+        A=A, B=B, C=C, D=D,
         vech_log_sQ=common.vech(scipy.linalg.logm(sQ)), 
         vech_log_sR=common.vech(scipy.linalg.logm(sR))
     )
