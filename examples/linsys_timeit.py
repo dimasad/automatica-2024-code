@@ -97,7 +97,7 @@ if __name__ == '__main__':
     value_and_grad(dec, data, coeff)
 
     # Time the function
-    fun = lambda: value_and_grad(dec, data, coeff)[1].block_until_ready()
+    fun = lambda: value_and_grad(dec, data, coeff)[1].q.block_until_ready()
     timing_list = timeit.repeat(fun, number=args.number, repeat=args.repeat)
     min_time = min(timing_list) / args.number
 
