@@ -139,6 +139,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '--txtout', type=argparse.FileType('w'), help='Text output file.',
     )
+    parser.add_argument(
+        '--estimator', choices=['gvi', 'pem'],
+        default='gvi', help='Parameter estimation method.',
+    )
     args = parser.parse_args()
 
     # Apply JAX config options
@@ -160,6 +164,9 @@ if __name__ == '__main__':
     ny = args.ny
     N = args.N
     Nbatch = args.Nbatch
+
+    # Determine if GVI will be used
+    use_gvi = args.estimator == 'gvi'
 
     # Generate the model
     A = np.random.rand(nx, nx)
@@ -195,8 +202,8 @@ if __name__ == '__main__':
     # Divide data into batches
     data = []
     for i in range(Nbatch):
-        offset_start = -args.nwin//2 if i > 0 else 0
-        offset_end = args.nwin//2 if i+1 < Nbatch else 0
+        offset_start = -args.nwin//2 if i > 0 and use_gvi else 0
+        offset_end = args.nwin//2 if i+1 < Nbatch and use_gvi else 0
         batch_slice = slice(i*N + offset_start, (i+1)*N + offset_end)
         datum = estimators.Data(y[batch_slice], u[batch_slice])
         data.append(datum)
@@ -212,26 +219,39 @@ if __name__ == '__main__':
     imp_true = np.array(signal.dimpulse(sys_true, n=100)[1])
     siminfo = imp_true, dict(A=A, B=B, C=C, D=D, sQ=sQ, sR=sR, Q=Q, R=R)
 
-    p = estimators.SmootherKernel(model, args.nwin, elbo_multiplier=-1)
-    K0 = np.zeros((nx, ny+nu, args.nwin))
-    K0[:, :, args.nwin//2] = np.random.randn(nx, ny+nu) * 1e-3
-    dec0 = p.Decision(
-        q=jnp.zeros(model.nq),
-        K=jnp.array(K0),
-        vech_log_S_cond=jnp.zeros(p.ntrilx),
-        S_cross=jnp.zeros((model.nx, model.nx))
-    )
+    if use_gvi:
+        p = estimators.SmootherKernel(model, args.nwin, elbo_multiplier=-1)
+        K0 = np.zeros((nx, ny+nu, args.nwin))
+        K0[:, :, args.nwin//2] = np.random.randn(nx, ny+nu) * 1e-3
+        dec0 = p.Decision(
+            q=jnp.zeros(model.nq),
+            K=jnp.array(K0),
+            vech_log_S_cond=jnp.zeros(p.ntrilx),
+            S_cross=jnp.zeros((model.nx, model.nx))
+        )
 
-    # Obtain integration coefficients
-    pair_us_dev, xpair_w = gvispe.stats.sigmapts(2*nx)
-    coeff = estimators.ExpectationCoeff(
-        estimators.XCoeff(*gvispe.stats.sigmapts(nx)),
-        estimators.XPairCoeff(pair_us_dev[:, :nx], pair_us_dev[:, nx:], xpair_w)
-    )
+        # Obtain integration coefficients
+        pair_us_dev, xpair_w = gvispe.stats.sigmapts(2*nx)
+        coeff = estimators.ExpectationCoeff(
+            estimators.XCoeff(*gvispe.stats.sigmapts(nx)),
+            estimators.XPairCoeff(pair_us_dev[:, :nx], pair_us_dev[:, nx:], xpair_w)
+        )
 
-    # JIT the cost and gradient functions
-    value_and_grad = jax.jit(jax.value_and_grad(p.elbo))
-    value_and_grad(dec0, data[0], coeff)
+        # JIT the cost and gradient functions
+        value_and_grad = jax.jit(
+            lambda dec, data: jax.value_and_grad(p.elbo(dec, data, coeff))
+        )
+    else:
+        p = estimators.PEM(model)
+        K0 = np.random.randn(nx, ny) * 1e-3
+        dec0 = p.Decision(
+            q=jnp.zeros(model.nq),
+            K=jnp.array(K0),
+        )
+        value_and_grad = jax.jit(jax.value_and_grad(p.cost))
+
+    # Do the JIT
+    value_and_grad(dec0, data[0])
 
     # Initialize solver
     dec = dec0
@@ -249,7 +269,7 @@ if __name__ == '__main__':
     for epoch in range(args.epochs):
         for i in np.random.permutation(Nbatch):
             # Calculate cost and gradient
-            cost, grad = value_and_grad(dec, data[i], coeff)
+            cost, grad = value_and_grad(dec, data[i])
 
             if steps % 100 == 0:
                 fooc = p.Decision(*[jnp.sum(v**2) ** 0.5 for v in grad])
@@ -258,12 +278,9 @@ if __name__ == '__main__':
                     f'{epoch}', f'sched={sched(steps):1.1e}', 
                     f'{cost=:1.2e}',
                     f'{fooc.K=:1.2e}', f'{fooc.q=:1.2e}', 
-                    f'{fooc.vech_log_S_cond=:1.2e}',
-                    f'{fooc.S_cross=:1.2e}',
                     f'{eratio=:1.2e}',
                     sep='\t'
-                )
-                
+                )                
 
             if any(jnp.any(~jnp.isfinite(v)) for v in grad):
                 break

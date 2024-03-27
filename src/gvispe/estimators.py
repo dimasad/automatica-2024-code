@@ -315,3 +315,31 @@ class SmootherKernel(SteadyState):
             u=data.u[skip:-skip],
             y=data.y[skip:-skip],
         )
+
+
+class PEM:
+    """Prediction Error Method estimator."""
+
+    class Decision(typing.NamedTuple):
+        """Problem decision variables."""
+        q: npt.NDArray
+        K: npt.NDArray
+
+    def __init__(self, model):
+        self.model = model
+        """The underlying dynamical system model."""
+
+    def predfun(self, x, y, u, dec: Decision):
+        ypred = self.model.h(x, u, dec.q)
+        e = y - ypred
+        xnext = self.model.f(x, u, dec.q) + dec.K @ e
+        return xnext, ypred
+
+    def cost(self, dec: Decision, data: Data):
+        scanfun = lambda x, datum: self.predfun(x, *datum, dec)
+        x0 = jnp.zeros(self.model.nx)
+        xnext, ypred = jax.lax.scan(scanfun, x0, data)
+
+        e = data.y - ypred
+        Q, R = jsp.linalg.qr(e, mode='economic')
+        return jnp.log(jnp.abs(R.diagonal())).sum()
