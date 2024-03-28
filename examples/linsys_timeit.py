@@ -55,6 +55,10 @@ if __name__ == '__main__':
     parser.add_argument(
         '--txtout', type=argparse.FileType('w'), help='Text output file.',
     )
+    parser.add_argument(
+        '--estimator', choices=['gvi', 'pem'],
+        default='gvi', help='Parameter estimation method.',
+    )
     args = parser.parse_args()
 
     # Apply JAX config options
@@ -72,32 +76,45 @@ if __name__ == '__main__':
 
     # Create model and data objects
     model = modeling.LinearGaussianModel(nx, nu, ny)
-    p = estimators.SmootherKernel(model, nwin)
 
-    dec = p.Decision(
-        q=jnp.zeros(model.nq),
-        K=jnp.zeros((nx, ny+nu, nwin)),
-        vech_log_S_cond=jnp.zeros(p.ntrilx),
-        S_cross=jnp.zeros((nx, nx))
-    )
-    data = estimators.Data(
-        y=jnp.zeros((N + nwin -1, ny)), 
-        u=jnp.zeros((N + nwin -1, nu))
-    )
-
-    # Obtain integration coefficients
-    pair_us_dev, xpair_w = gvispe.stats.sigmapts(2*nx)
-    coeff = estimators.ExpectationCoeff(
-        estimators.XCoeff(*gvispe.stats.sigmapts(nx)),
-        estimators.XPairCoeff(pair_us_dev[:, :nx], pair_us_dev[:, nx:], xpair_w)
-    )
+    if args.estimator == 'gvi':
+        p = estimators.SmootherKernel(model, nwin)
+        dec = p.Decision(
+            q=jnp.zeros(model.nq),
+            K=jnp.zeros((nx, ny+nu, nwin)),
+            vech_log_S_cond=jnp.zeros(p.ntrilx),
+            S_cross=jnp.zeros((nx, nx))
+        )
+        data = estimators.Data(
+            y=jnp.zeros((N + nwin -1, ny)), 
+            u=jnp.zeros((N + nwin -1, nu))
+        )
+        # Obtain integration coefficients
+        pair_us_dev, xpair_w = gvispe.stats.sigmapts(2*nx)
+        coeff = estimators.ExpectationCoeff(
+            estimators.XCoeff(*gvispe.stats.sigmapts(nx)),
+            estimators.XPairCoeff(pair_us_dev[:, :nx], pair_us_dev[:, nx:], xpair_w)
+        )
+        value_and_grad = jax.jit(
+            jax.value_and_grad(lambda dec, data: p.elbo(dec, data, coeff))
+        )
+    else:
+        p = estimators.PEM(model)
+        dec = p.Decision(
+            q=jnp.zeros(model.nq),
+            K=jnp.zeros((nx, ny)),
+        )
+        data = estimators.Data(
+            y=jnp.zeros((N, ny)), 
+            u=jnp.zeros((N, nu))
+        )
+        value_and_grad = jax.jit(jax.value_and_grad(p.cost))
 
     # JIT the cost and gradient functions
-    value_and_grad = jax.jit(jax.value_and_grad(p.elbo))
-    value_and_grad(dec, data, coeff)
+    value_and_grad(dec, data)
 
     # Time the function
-    fun = lambda: value_and_grad(dec, data, coeff)[1].q.block_until_ready()
+    fun = lambda: value_and_grad(dec, data)[1].q.block_until_ready()
     timing_list = timeit.repeat(fun, number=args.number, repeat=args.repeat)
     min_time = min(timing_list) / args.number
 
