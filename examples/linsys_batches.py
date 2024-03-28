@@ -239,7 +239,7 @@ if __name__ == '__main__':
 
         # JIT the cost and gradient functions
         value_and_grad = jax.jit(
-            lambda dec, data: jax.value_and_grad(p.elbo(dec, data, coeff))
+            lambda dec, data: jax.value_and_grad(p.elbo)(dec, data, coeff)
         )
     else:
         p = estimators.PEM(model)
