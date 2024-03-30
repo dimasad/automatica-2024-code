@@ -13,7 +13,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import sparse
 
-from . import common
+from . import common, stats
 
 
 class Data(typing.NamedTuple):
@@ -324,10 +324,14 @@ class PEM:
         """Problem decision variables."""
         q: npt.NDArray
         K: npt.NDArray
+        vech_log_sR: npt.NDArray
 
     def __init__(self, model):
         self.model = model
         """The underlying dynamical system model."""
+
+        self.ntrily = model.ny * (model.ny + 1) // 2
+        """Number of elements in lower triangle of ny by ny matrix."""
 
     def predfun(self, x, y, u, dec: Decision):
         ypred = self.model.h(x, u, dec.q)
@@ -340,6 +344,5 @@ class PEM:
         x0 = jnp.zeros(self.model.nx)
         xnext, ypred = jax.lax.scan(scanfun, x0, data)
 
-        e = data.y - ypred
-        Q, R = jsp.linalg.qr(e, mode='economic')
-        return jnp.log(jnp.abs(R.diagonal())).sum()
+        log_sR = common.matl(dec.vech_log_sR)
+        return -stats.mvn_logpdf_logchol(data.y, ypred, log_sR).sum(0)

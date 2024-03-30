@@ -103,6 +103,7 @@ if __name__ == '__main__':
         dec = p.Decision(
             q=jnp.zeros(model.nq),
             K=jnp.zeros((nx, ny)),
+            vech_log_sR=jnp.zeros(p.ntrily),
         )
         data = estimators.Data(
             y=jnp.zeros((N, ny)), 

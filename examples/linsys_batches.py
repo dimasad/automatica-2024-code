@@ -162,6 +162,7 @@ if __name__ == '__main__':
     nx = args.nx
     nu = args.nu
     ny = args.ny
+    ntrily = ny * (ny + 1) // 2
     N = args.N
     Nbatch = args.Nbatch
 
@@ -247,6 +248,7 @@ if __name__ == '__main__':
         dec0 = p.Decision(
             q=jnp.zeros(model.nq),
             K=jnp.array(K0),
+            vech_log_sR=jnp.zeros(p.ntrily),
         )
         value_and_grad = jax.jit(jax.value_and_grad(p.cost))
 
