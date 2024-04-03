@@ -285,6 +285,7 @@ if __name__ == '__main__':
                 )                
 
             if any(jnp.any(~jnp.isfinite(v)) for v in grad):
+                print('Non-finite gradient in detected, stopping.')
                 break
 
             updates, opt_state = optimizer.update(grad, opt_state)
