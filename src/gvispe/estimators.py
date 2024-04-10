@@ -346,3 +346,11 @@ class PEM:
 
         log_sR = common.matl(dec.vech_log_sR)
         return -stats.mvn_logpdf_logchol(data.y, ypred, log_sR).sum(0)
+    
+    def cost_grad(self, dec, data: Data):
+        return jax.grad(self.cost)(dec, data)
+
+    def cost_hvp(self, dec, dec_d, data: Data):
+        primals = dec, data
+        duals = dec_d, data.zeros_like()
+        return jax.jvp(self.cost_grad, primals, duals)[1]

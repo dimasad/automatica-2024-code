@@ -65,6 +65,9 @@ class DiscretizedDuffing(sde.SO15ITScheme):
     def h(self, x, u, q):
         return x[..., :1]
 
+    def f(self, x, u, q):
+        return self._trans_mean(x, u, q, self.dt)
+
     @hedeut.jax_vectorize_method(signature='(y),(x),(u),(q)->()')
     def meas_logpdf(self, y, x, u, q):
         mean = self.h(x, u, q)[0]
@@ -132,8 +135,8 @@ if __name__ == '__main__':
         default='stochastic', help='What type of optimization to perform.'
     )
     parser.add_argument(
-        '--problem', choices=['steady-state', 'transient', 'smoother-kernel'],
-        default='steady-state', help='Problem parameterization.',
+        '--problem', default='steady-state', help='Problem parameterization.',
+        choices=['steady-state', 'transient', 'smoother-kernel', 'pem'],
     )
     parser.add_argument(
         '--nwin', type=int, default=21, help='Convolution window size.',
@@ -247,6 +250,14 @@ if __name__ == '__main__':
             vech_log_S_cond=jnp.zeros(p.ntrilx),
             S_cross=jnp.zeros((model.nx, model.nx))
         )
+    elif args.problem == 'pem':
+        p = estimators.PEM(model)
+        dec0 = p.Decision(
+            q=jnp.array(qsim),
+            K=jnp.zeros((2, 1)),
+            vech_log_sR=jnp.zeros(1),
+        )
+
     
     # Obtain integration coefficients
     pair_us_dev, xpair_w = gvispe.stats.ghcub(2, 2*nx)
@@ -256,11 +267,12 @@ if __name__ == '__main__':
     )
 
     # Run deterministic optimization
-    if args.optimizer == 'deterministic':
+    if args.optimizer == 'deterministic' and args.problem != 'pem':
         # Wrap optimization functions
         packer = p.packer(Nest)
         pack = lambda dec: packer.pack(*dec)
         unpack = lambda xvec: p.Decision(**packer.unpack(xvec))
+
         fix = dict(data=data, coeff=coeff, packer=packer)
         cost = p.fix_and_jit('elbo_packed', **fix)
         grad = p.fix_and_jit('elbo_grad_packed', **fix)
@@ -268,6 +280,55 @@ if __name__ == '__main__':
 
         # Run jax JIT on optimization functions
         decvec0 = pack(dec0)
+        cost(decvec0)
+        grad(decvec0)
+        hvp(decvec0, decvec0)
+
+        # Save start of optimization
+        opt_start = datetime.datetime.today()
+
+        # Run optimization
+        sol = optimize.minimize(
+            cost, decvec0, jac=grad, hessp=hvp, method='trust-constr',
+            options={'verbose': 2, 'maxiter': args.niter, 'disp': 1},
+        )
+        decopt = unpack(sol.x)
+    if args.optimizer == 'deterministic' and args.problem != 'pem':
+        # Wrap optimization functions
+        packer = p.packer(Nest)
+        pack = lambda dec: packer.pack(*dec)
+        unpack = lambda xvec: p.Decision(**packer.unpack(xvec))
+
+        fix = dict(data=data, coeff=coeff, packer=packer)
+        cost = p.fix_and_jit('elbo_packed', **fix)
+        grad = p.fix_and_jit('elbo_grad_packed', **fix)
+        hvp = p.fix_and_jit('elbo_hvp_packed', **fix)
+
+        # Run jax JIT on optimization functions
+        decvec0 = pack(dec0)
+        cost(decvec0)
+        grad(decvec0)
+        hvp(decvec0, decvec0)
+
+        # Save start of optimization
+        opt_start = datetime.datetime.today()
+
+        # Run optimization
+        sol = optimize.minimize(
+            cost, decvec0, jac=grad, hessp=hvp, method='trust-constr',
+            options={'verbose': 2, 'maxiter': args.niter, 'disp': 1},
+        )
+        decopt = unpack(sol.x)
+    if args.optimizer == 'deterministic' and args.problem == 'pem':
+        # Wrap optimization functions
+        decvec0, unpack = jax.flatten_util.ravel_pytree(dec0)
+        pack = lambda dec: jax.flatten_util.ravel_pytree(dec)[0]
+
+        cost = jax.jit(lambda dvec: p.cost(unpack(dvec), data))
+        grad = jax.jit(lambda dvec: pack(p.cost_grad(unpack(dvec), data)))
+        hvp = jax.jit(lambda dvec, dvec_d: pack(p.cost_hvp(unpack(dvec), unpack(dvec_d), data)))
+
+        # Run jax JIT on optimization functions
         cost(decvec0)
         grad(decvec0)
         hvp(decvec0, decvec0)
@@ -346,14 +407,20 @@ if __name__ == '__main__':
     time_elapsed = endtime - start
 
     # Calculate optimal problem variables
-    vopt = p.problem_variables(decopt, data)
+    if args.problem != 'pem':
+        vopt_dict = p.problem_variables(decopt, data)._asdict()
+    else:
+        vopt_dict = dict()
 
     # Save results
     if args.txtout is not None:
         qerr = np.abs(decopt.q - qsim)
-        skip = args.nwin//2
-        xwin = xmeas[skip:-skip] if args.problem == "smoother-kernel" else xmeas
-        xerr = np.abs(xwin - vopt.xbar).mean(0)
+        if args.problem == "pem":
+            xerr = [-1, -1]
+        else:
+            skip = args.nwin//2
+            xwin = xmeas[skip:-skip] if args.problem == "smoother-kernel" else xmeas
+            xerr = np.abs(xwin - vopt_dict['xbar']).mean(0)
         print(
             args.problem, args.nwin, args.tf, Nest, opt_time.total_seconds(),
             *qerr, *xerr,
@@ -371,7 +438,7 @@ if __name__ == '__main__':
             args=vars(args),
             config=config,
             decopt=decopt._asdict(),
-            vopt=vopt._asdict(),
+            vopt=vopt_dict,
             twin=test[args.nwin//2:-args.nwin//2],
             time_elapsed=time_elapsed.total_seconds(),
             opt_time=opt_time.total_seconds(),
