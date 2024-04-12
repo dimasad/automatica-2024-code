@@ -19,6 +19,7 @@ import jax.numpy as jnp
 import jax.scipy as jsp
 import numpy as np
 import optax
+import scipy.linalg
 from scipy import interpolate, optimize, signal, stats
 
 import gvispe.stats
@@ -67,6 +68,9 @@ class DiscretizedDuffing(sde.SO15ITScheme):
 
     def f(self, x, u, q):
         return self._trans_mean(x, u, q, self.dt)
+    
+    def G(self, x, u, q):
+        return self._trans_sigma(x, u, q, self.dt)
 
     @hedeut.jax_vectorize_method(signature='(y),(x),(u),(q)->()')
     def meas_logpdf(self, y, x, u, q):
@@ -252,10 +256,18 @@ if __name__ == '__main__':
         )
     elif args.problem == 'pem':
         p = estimators.PEM(model)
+        A = jax.jacobian(lambda x: model.f(x, np.r_[0], qsim))(x0sim)
+        C = jax.jacobian(lambda x: model.h(x, np.r_[0], qsim))(x0sim)
+        G = model.G(x0sim, np.r_[0], qsim)
+        Q = G @ G.T
+        Ppred = scipy.linalg.solve_discrete_are(A.T, C.T, Q, [[ystd**2]]) 
+        S = C @ Ppred @ C.T + ystd**2
+        K = Ppred @ C.T @ jnp.linalg.inv(S)
         dec0 = p.Decision(
             q=jnp.array(qsim),
-            K=jnp.zeros((2, 1)),
-            vech_log_sR=jnp.zeros(1),
+            K=jnp.array(K),
+            vech_log_sR=jnp.sqrt(S).flatten(),
+            x0=jnp.array(x0sim),
         )
 
     

@@ -325,6 +325,7 @@ class PEM:
         q: npt.NDArray
         K: npt.NDArray
         vech_log_sR: npt.NDArray
+        x0: npt.NDArray
 
     def __init__(self, model):
         self.model = model
@@ -341,7 +342,7 @@ class PEM:
 
     def cost(self, dec: Decision, data: Data):
         scanfun = lambda x, datum: self.predfun(x, *datum, dec)
-        x0 = jnp.zeros(self.model.nx)
+        x0 = dec.x0 if len(dec.x0) > 0 else jnp.zeros(self.model.nx)
         xnext, ypred = jax.lax.scan(scanfun, x0, data)
 
         log_sR = common.matl(dec.vech_log_sR)

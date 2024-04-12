@@ -249,6 +249,7 @@ if __name__ == '__main__':
             q=jnp.zeros(model.nq),
             K=jnp.array(K0),
             vech_log_sR=jnp.zeros(p.ntrily),
+            x0=jnp.zeros(0),
         )
         value_and_grad = jax.jit(jax.value_and_grad(p.cost))
 
