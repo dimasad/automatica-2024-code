@@ -1,0 +1,15 @@
+#!/bin/bash
+
+cd /users/da00033/scratch/data/linsys_2024-03-28_14h14m45s
+
+export SBATCH_GPUS=0
+export SBATCH_PARTITION=comm_small_day
+export SBATCH_JOB_NAME="1-0-ssest"
+
+
+export ARG_N=10000
+export ARG_MATFILE=1-0-gvi.mat
+export ARG_OUTFILE="$HOME/data/linsys_2024-03-28_14h14m45s/1-0-ssest.txt"
+export ARG_NULLSYS0=false
+
+sbatch linsys-ssest-run

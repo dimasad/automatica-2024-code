@@ -1,0 +1,49 @@
+#!/bin/bash
+
+tf_initial=50
+tf_num=5
+tf_base=2
+reps=200
+transient_cutoff=100
+
+cases="pem steady-state transient sk-21 sk-51 sk-101 sk-201"
+
+BASEOPTS="--jax-x64 --jax-platform=cpu --optimizer=deterministic"
+SCRIPT="duffing-vsi-run"
+
+DATADIR=$(date "+$HOME/data/duffing_%F_%Hh%Mm%Ss")
+mkdir -p $DATADIR
+echo Result dir: $DATADIR
+
+for case in $cases ; do
+    for (( i=0 ; i<$tf_num ; i++ )); do 
+        tf=$(bc <<< "$tf_base^$i*$tf_initial")
+
+        if [ "$case" == "transient" ]; then
+            if (( tf > transient_cutoff )); then
+                continue
+            fi
+        fi
+
+        SUBDIR="$case/tf_$tf"
+        mkdir -p $DATADIR/$SUBDIR
+        cd $DATADIR/$SUBDIR
+
+        for (( seedsim=0 ; seedsim<$reps ; seedsim++ )) ;  do
+            if [[ $case == sk-* ]] ; then
+                PROBLEM="smoother-kernel"
+                NWIN=$(echo $case | cut -b 4-)
+            else
+                PROBLEM=$case
+                NWIN=1
+            fi
+
+            OPTS="--tf=$tf --seedsim=$seedsim --nwin=$NWIN --problem=$PROBLEM
+                  --txtout=$seedsim.txt"
+            
+            SBATCH_OPTS="--output=$seedsim.out --job-name=$case-$tf-$seedsim
+                         -p comm_small_day"
+            sbatch $SBATCH_OPTS $SCRIPT $BASEOPTS $OPTS $@
+        done
+    done
+done

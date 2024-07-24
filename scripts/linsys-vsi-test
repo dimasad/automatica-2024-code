@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Target script parameters
+let NX=80
+let NU=32
+let NY=32
+REPS=4
+LRATE0=2.5e-3
+TRANSITION_STEPS=3500
+MAX_POLE_RADIUS=0.95
+
+# SLURM parameters
+export SBATCH_GPUS=1
+export SBATCH_PARTITION=comm_gpu_inter
+
+# Parameters of the job run script
+BASEOPTS="--N=10000 --Nbatch=1000 --epochs=75"
+SCRIPT="linsys-vsi-run"
+
+# Create directories
+DIRNAME=$(date "+linsys_test_%F_%Hh%Mm%Ss")
+DATADIR="$HOME/data/$DIRNAME"
+SCRATCHDIR="$HOME/scratch/data/$DIRNAME"
+mkdir -p $DATADIR
+mkdir -p $SCRATCHDIR
+cp $0 $DATADIR/
+cp $0 $SCRATCHDIR/
+
+# Change to the data directory and display
+cd $DATADIR
+echo Result dir: $DIRNAME
+
+for (( SEED=0 ; SEED<$REPS ; SEED++ )) ;  do
+    ID="$SEED"
+    export SBATCH_JOB_NAME=$ID
+
+    OPTS="--nx=$NX --nu=$NU --ny=$NY --seed=$SEED
+          --max_pole_radius=$MAX_POLE_RADIUS
+          --transition_steps=$TRANSITION_STEPS --lrate0=$LRATE0
+          --pickleout=$SCRATCHDIR/$ID.pickle --txtout=$ID.txt 
+          $BASEOPTS"
+    sbatch $SCRIPT $OPTS
+
+    # Save job command-line
+    SBATCHENV=$(env | grep SBATCH_)
+    echo $SBATCHENV sbatch $SCRIPT $OPTS >> $ID.cmdline
+done

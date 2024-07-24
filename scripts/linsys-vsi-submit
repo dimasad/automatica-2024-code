@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Job submission parameters
+NX_BASE=5
+NU_BASE=2
+NY_BASE=2
+MUL_END=8
+REPS=50
+LRATE0=0.0025
+TRANSITION_STEPS=3500
+MAX_POLE_RADIUS=0.95
+ESTIMATORS=(gvi pem)
+
+# Parameters of the job run script
+BASEOPTS="--N=10000 --Nbatch=1000 --epochs=75"
+SCRIPT="linsys-vsi-run"
+
+# Create directories
+DIRNAME=$(date "+linsys_%F_%Hh%Mm%Ss")
+DATADIR="$HOME/data/$DIRNAME"
+SCRATCHDIR="$HOME/scratch/data/$DIRNAME"
+mkdir -p $DATADIR
+mkdir -p $SCRATCHDIR
+cp $0 $DATADIR/
+cp $0 $SCRATCHDIR/
+
+# Change to the data directory
+cd $DATADIR
+echo Result dir: $DATADIR
+
+# Iterate over the cases
+for (( MUL=1 ; MUL<=MUL_END ; MUL=MUL*2 )); do 
+
+    # Iterate over the estimators
+    for EST in ${ESTIMATORS[*]}; do
+
+        # Choose SLURM partition and gpus
+        if [ "$EST" == "gvi" ]; then
+            export SBATCH_GPUS=1
+            export SBATCH_PARTITION=comm_gpu_inter
+        else
+            export SBATCH_GPUS=1
+            export SBATCH_PARTITION=comm_gpu_inter
+        fi
+
+        # Determine model dimensions
+        NX=$(( NX_BASE*MUL ))
+        NY=$(( NY_BASE*MUL ))
+        NU=$(( NU_BASE*MUL ))
+
+        for (( SEED=0 ; SEED<$REPS ; SEED++ )) ;  do
+            ID="$MUL-$SEED-$EST"
+            export SBATCH_JOB_NAME=$ID
+
+            OPTS="--nx=$NX --nu=$NU --ny=$NY --seed=$SEED --lrate0=$LRATE0
+                --max_pole_radius=$MAX_POLE_RADIUS 
+                --transition_steps=$TRANSITION_STEPS
+                --savemat=$SCRATCHDIR/$ID.mat --pickleout=$SCRATCHDIR/$ID.pickle
+                --estimator=$EST
+                --txtout=$ID.txt
+                $BASEOPTS"
+            sbatch $SCRIPT $OPTS
+
+            # Save job command-line
+            SBATCHENV=$(env | grep SBATCH_)
+            echo $SBATCHENV sbatch $SCRIPT $OPTS >> $ID.cmdline
+        done
+    done
+done

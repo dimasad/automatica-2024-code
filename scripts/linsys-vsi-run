@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#SBATCH --output=%x.%j.out
+
+# Setup python virtual environment
+module load lang/python/cpython_3.10.11_gcc122
+source $HOME/venv/cpy3.10.11/bin/activate
+
+TARGET="$HOME/code/visid/examples/linsys_batches.py"
+
+# Run script
+python -u $TARGET $@

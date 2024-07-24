@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Job submission parameters
+NX_BASE=5
+NU_BASE=2
+NY_BASE=2
+MUL_END=8
+REPS=10
+
+ESTIMATORS=(gvi pem)
+DIMENSIONS=(
+    "--nx=10 --nu=4 --ny=4"
+    "--nx=40 --nu=16 --ny=16"
+)
+
+# Parameters of the job run script
+SCRIPT="linsys-timeit-run"
+
+# Create directories
+DIRNAME=$(date "+linsys_timeit_%F_%Hh%Mm%Ss")
+DATADIR="$HOME/data/$DIRNAME"
+mkdir -p $DATADIR
+cp $0 $DATADIR/
+
+# Change to the data directory
+cd $DATADIR
+echo Result dir: $DATADIR
+
+
+# Iterate over the cases
+for ((I=0; I<${#DIMENSIONS[@]}; I++)) do
+    DIM=${DIMENSIONS[$I]}
+
+    # Iterate over the estimators
+    for EST in ${ESTIMATORS[*]}; do
+
+        for ((N=500; N<=15000; N=$(bc <<< "$N*1.5/1"))); do 
+            # Run script on GPU
+            ID="$I-$N-$EST-gpu"
+            export SBATCH_JOB_NAME=$ID
+            export SBATCH_GPUS=1
+            export SBATCH_PARTITION=comm_gpu_inter
+            OPTS="$DIM --N=$N --jax-platform=gpu --estimator=$EST
+                  --txtout=$ID.txt"
+            sbatch $SCRIPT $OPTS
+
+            # Save job command-line
+            SBATCHENV=$(env | grep SBATCH_)
+            echo $SBATCHENV sbatch $SCRIPT $OPTS >> $ID.cmdline        
+
+            # Run script on CPU
+            ID="$I-$N-$EST-cpu"
+            export SBATCH_JOB_NAME=$ID
+            export SBATCH_GPUS=0
+            export SBATCH_PARTITION=comm_small_day
+            OPTS="$DIM --N=$N --jax-platform=cpu --estimator=$EST
+                  --txtout=$ID.txt"
+            sbatch $SCRIPT $OPTS
+
+            # Save job command-line
+            SBATCHENV=$(env | grep SBATCH_)
+            echo $SBATCHENV sbatch $SCRIPT $OPTS >> $ID.cmdline        
+        done
+    done
+done
