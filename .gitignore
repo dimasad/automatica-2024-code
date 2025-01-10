@@ -1,6 +1,9 @@
 # IDE Configuration
 .vscode/
 
+# Output data
+data/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
