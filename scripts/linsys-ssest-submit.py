@@ -2,7 +2,10 @@
 
 import os
 import pathlib
+import shutil
 
+SCRIPT_DIR = pathlib.Path(__file__).parent.resolve()
+SCRIPT = SCRIPT_DIR / 'linsys-ssest-run'
 
 if __name__ == '__main__':
     # Set GLOBAL environment variables
@@ -29,4 +32,8 @@ if __name__ == '__main__':
         os.environ['SBATCH_JOB_NAME'] = f'{id}'
         os.environ['ARG_OUTFILE'] = f'{id}.txt'
         os.environ['ARG_NULLSYS0'] = 'true'
-        os.system('sbatch linsys-ssest-run')
+        if shutil.which('sbatch'):
+            os.system(f'sbatch {SCRIPT}')
+        else:
+            os.system(f'{SCRIPT}')
+        

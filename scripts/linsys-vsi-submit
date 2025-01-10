@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+REPO_DIR="$SCRIPT_DIR/.."
+
 # Job submission parameters
 NX_BASE=5
 NU_BASE=2
@@ -13,12 +16,12 @@ ESTIMATORS=(gvi pem)
 
 # Parameters of the job run script
 BASEOPTS="--N=10000 --Nbatch=1000 --epochs=75"
-SCRIPT="linsys-vsi-run"
+SCRIPT="$REPO_DIR/scripts/linsys-vsi-run"
 
 # Create directories
 DIRNAME=$(date "+linsys_%F_%Hh%Mm%Ss")
-DATADIR="$HOME/data/$DIRNAME"
-SCRATCHDIR="$HOME/scratch/data/$DIRNAME"
+DATADIR="$REPO_DIR/data/$DIRNAME"
+SCRATCHDIR="$REPO_DIR/scratch/data/$DIRNAME"
 mkdir -p $DATADIR
 mkdir -p $SCRATCHDIR
 cp $0 $DATADIR/

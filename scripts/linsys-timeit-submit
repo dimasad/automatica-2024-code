@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+REPO_DIR="$SCRIPT_DIR/.."
+
 # Job submission parameters
 NX_BASE=5
 NU_BASE=2
@@ -14,11 +17,11 @@ DIMENSIONS=(
 )
 
 # Parameters of the job run script
-SCRIPT="linsys-timeit-run"
+SCRIPT="$REPO_DIR/scripts/linsys-timeit-run"
 
 # Create directories
 DIRNAME=$(date "+linsys_timeit_%F_%Hh%Mm%Ss")
-DATADIR="$HOME/data/$DIRNAME"
+DATADIR="$REPO_DIR/data/$DIRNAME"
 mkdir -p $DATADIR
 cp $0 $DATADIR/
 
@@ -55,7 +58,11 @@ for ((I=0; I<${#DIMENSIONS[@]}; I++)) do
             export SBATCH_PARTITION=comm_small_day
             OPTS="$DIM --N=$N --jax-platform=cpu --estimator=$EST
                   --txtout=$ID.txt"
-            sbatch $SCRIPT $OPTS
+            if [ -x "$(command -v sbatch)" ]; then
+                sbatch $SCRIPT $OPTS
+            else
+                $SCRIPT $OPTS
+            fi
 
             # Save job command-line
             SBATCHENV=$(env | grep SBATCH_)

@@ -2,12 +2,15 @@
 
 #SBATCH --output=%x.%j.out
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+REPO_DIR="$SCRIPT_DIR/.."
+
 # Load MATLAB module
 module purge
 module load matlab
 
 MATLABJOB_TEMPLATE='
-addpath("/users/da00033/code/visid/examples/");
+addpath("$REPO_DIR/examples/");
 
 N = $ARG_N;
 matfile = "$ARG_MATFILE";

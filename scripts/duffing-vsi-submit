@@ -1,5 +1,8 @@
 #!/bin/bash
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+REPO_DIR="$SCRIPT_DIR/.."
+
 tf_initial=50
 tf_num=5
 tf_base=2
@@ -9,9 +12,9 @@ transient_cutoff=100
 cases="pem steady-state transient sk-21 sk-51 sk-101 sk-201"
 
 BASEOPTS="--jax-x64 --jax-platform=cpu --optimizer=deterministic"
-SCRIPT="duffing-vsi-run"
+SCRIPT="$SCRIPT_DIR/duffing-vsi-run"
 
-DATADIR=$(date "+$HOME/data/duffing_%F_%Hh%Mm%Ss")
+DATADIR=$(date "+$REPO_DIR/data/duffing_%F_%Hh%Mm%Ss")
 mkdir -p $DATADIR
 echo Result dir: $DATADIR
 
@@ -43,7 +46,11 @@ for case in $cases ; do
             
             SBATCH_OPTS="--output=$seedsim.out --job-name=$case-$tf-$seedsim
                          -p comm_small_day"
-            sbatch $SBATCH_OPTS $SCRIPT $BASEOPTS $OPTS $@
+            if [ -x "$(command -v sbatch)" ]; then
+                sbatch $SBATCH_OPTS $SCRIPT $BASEOPTS $OPTS $@
+            else
+                $SCRIPT $BASEOPTS $OPTS $@
+            fi
         done
     done
 done
