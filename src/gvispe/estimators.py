@@ -354,4 +354,5 @@ class PEM:
     def cost_hvp(self, dec, dec_d, data: Data):
         primals = dec, data
         duals = dec_d, data.zeros_like()
+        duals = jax.tree_util.tree_map(lambda a:jnp.asarray(a, float), duals)
         return jax.jvp(self.cost_grad, primals, duals)[1]
